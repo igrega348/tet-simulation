@@ -1,23 +1,42 @@
 package main
 
 import (
-	"encoding/csv"
 	"fmt"
+	"math"
 	"os"
-	"strconv"
 
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/plotutil"
 	"gonum.org/v1/plot/vg"
 )
+
+var Ainv *mat.Dense
+var P *mat.Dense
+var params map[string]float64
+
+// Driving to the system
+func theta0(t float64) (float64, float64) {
+	omega := 2.0 * math.Pi * 10.0
+	return math.Sin(omega * t), omega * math.Cos(omega*t)
+}
 
 // Function to calculate the derivative of the system (example)
 func f(t float64, y *mat.VecDense) *mat.VecDense {
 	// Example: Simple harmonic oscillator
 	dydt := mat.NewVecDense(y.Len(), nil)
-	dydt.SetVec(0, y.AtVec(1))  // dy/dt = v
-	dydt.SetVec(1, -y.AtVec(0)) // dv/dt = -y  (assuming mass=1, spring constant=1)
+	theta, thetadot := theta0(t)
+	fvec := mat.NewVecDense(4, nil)
+	fvec.SetVec(2, params["lamA"]*thetadot+params["kA"]*theta)
+
+	dydt.MulVec(Ainv, fvec)
+	px := mat.NewVecDense(4, nil)
+	px.MulVec(P, y)
+	px.ScaleVec(-1.0, px)
+	dydt.AddVec(dydt, px)
 	return dydt
 }
 
@@ -57,56 +76,38 @@ func rk4(t float64, y *mat.VecDense, dt float64) *mat.VecDense {
 	return result
 }
 
-// Export data to CSV file
-func exportDataToCSV(filename string, times []float64, positions []float64, velocities []float64) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err // Return the error instead of panicking
-	}
-	defer file.Close()
-
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-
-	header := []string{"Time", "Position", "Velocity"}
-	if err := writer.Write(header); err != nil {
-		return err
-	}
-
-	for i := 0; i < len(times); i++ {
-		row := []string{
-			strconv.FormatFloat(times[i], 'G', 6, 64),
-			strconv.FormatFloat(positions[i], 'G', 6, 64),
-			strconv.FormatFloat(velocities[i], 'G', 6, 64),
-		}
-		if err := writer.Write(row); err != nil {
-			return err
-		}
-	}
-	fmt.Printf("Simulation results written to %s\n", filename)
-
-	return nil // Indicate success
-}
-
 // Plot data
-func plotData(filename string, times []float64, positions []float64, velocities []float64) error {
+func plotData(filename string, times *mat.VecDense, history *mat.Dense) error {
 	p := plot.New()
 
-	pts := make(plotter.XYs, len(times))
-	for i := range times {
-		pts[i].X = times[i]
-		pts[i].Y = positions[i]
+	pts := make(plotter.XYs, times.Len())
+	for i := 0; i < times.Len(); i++ {
+		pts[i].X = times.AtVec(i)
+		pts[i].Y = history.At(i, 0) // 1st dof
 	}
-
-	line, err := plotter.NewLine(pts)
+	line1, err := plotter.NewLine(pts)
 	if err != nil {
 		return err
 	}
-	p.Add(line)
+	line1.LineStyle.Color = plotutil.Color(0)
+	p.Add(line1)
+	p.Legend.Add("Position DOF 1", line1)
 
-	p.Title.Text = "Simulation Results: Position vs. Time"
-	p.X.Label.Text = "Time"
-	p.Y.Label.Text = "Position"
+	for i := 0; i < times.Len(); i++ {
+		pts[i].X = times.AtVec(i)
+		pts[i].Y = history.At(i, 2) // 3rd dof
+	}
+	line2, err := plotter.NewLine(pts)
+	if err != nil {
+		return err
+	}
+	line2.LineStyle.Color = plotutil.Color(1)
+	p.Add(line2)
+	p.Legend.Add("Velocity DOF 1", line2)
+
+	p.Title.Text = "Simulation Results"
+	p.X.Label.Text = "Time (s)"
+	p.Y.Label.Text = "Position/velocity (units)"
 
 	if err := p.Save(4*vg.Inch, 3*vg.Inch, filename); err != nil {
 		return err
@@ -116,19 +117,35 @@ func plotData(filename string, times []float64, positions []float64, velocities 
 
 	// Plot Velocity vs. Time
 	p2 := plot.New()
-	pts2 := make(plotter.XYs, len(times))
-	for i := range times {
-		pts2[i].X = times[i]
-		pts2[i].Y = velocities[i]
+	pts2 := make(plotter.XYs, times.Len())
+	for i := 0; i < times.Len(); i++ {
+		pts2[i].X = times.AtVec(i)
+		pts2[i].Y = history.At(i, 1) // 2nd dof
 	}
-	line2, err := plotter.NewLine(pts2)
+	line3, err := plotter.NewLine(pts2)
 	if err != nil {
 		return err
 	}
-	p2.Add(line2)
-	p2.Title.Text = "Simulation Results: Velocity vs. Time"
-	p2.X.Label.Text = "Time"
-	p2.Y.Label.Text = "Velocity"
+	line3.LineStyle.Color = plotutil.Color(2)
+	p2.Add(line3)
+	p2.Legend.Add("Position DOF 2", line3)
+
+	for i := 0; i < times.Len(); i++ {
+		pts2[i].X = times.AtVec(i)
+		pts2[i].Y = history.At(i, 3) // 4th dof
+	}
+	line4, err := plotter.NewLine(pts2)
+	if err != nil {
+		return err
+	}
+	line4.LineStyle.Color = plotutil.Color(3)
+	p2.Add(line4)
+	p2.Legend.Add("Velocity DOF 2", line4)
+
+	p2.Title.Text = "Simulation Results"
+	p2.X.Label.Text = "Time (s)"
+	p2.Y.Label.Text = "Position/velocity (units)"
+
 	if err := p2.Save(4*vg.Inch, 3*vg.Inch, "simulation_plot_velocity.png"); err != nil {
 		return err
 	}
@@ -137,33 +154,76 @@ func plotData(filename string, times []float64, positions []float64, velocities 
 	return nil
 }
 
+func assembleMatrices(params map[string]float64) (*mat.Dense, *mat.Dense) {
+	// Assemble the matrices A and b
+	A := mat.NewDense(4, 4, []float64{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, params["I1"], 0, 0, 0, 0, params["I2"]})
+	kA := params["kA"]
+	kB := params["kB"]
+	lamA := params["lamA"]
+	lamB := params["lamB"]
+	B := mat.NewDense(4, 4, []float64{0, 0, 1, 0, 0, 0, 0, 1, kA + kB, -kB, lamA + lamB, -lamB, -kB, kB, -lamB, lamB})
+	return A, B
+}
+
+func matPrint(X mat.Matrix) {
+	fa := mat.Formatted(X, mat.Prefix(""), mat.Excerpt(0))
+	fmt.Printf("%v\n", fa)
+}
+
 func main() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	zerolog.SetGlobalLevel(zerolog.WarnLevel)
+
+	// import from file params.yaml
+	var err error
+	params, err = importParamsFromYAML("params.yaml")
+	if err != nil {
+		fmt.Println("Error importing parameters:", err)
+		return
+	}
+	fmt.Println("Imported parameters:", params)
+	A, B := assembleMatrices(params)
+	fmt.Println("Matrix A:")
+	matPrint(A)
+	fmt.Println("Matrix B:")
+	matPrint(B)
+	Ainv = mat.NewDense(4, 4, nil)
+	err = Ainv.Inverse(A)
+	if err != nil {
+		fmt.Println("Error calculating inverse of A:", err)
+		return
+	}
+	fmt.Println("Inverse of A:")
+	matPrint(Ainv)
+	P = mat.NewDense(4, 4, nil)
+	P.Mul(Ainv, B)
+
 	t := 0.0
 	dt := 0.01
-	y := mat.NewVecDense(2, []float64{1.0, 0.0})
+	tmax := 1.0
+	Nsteps := int(tmax / dt)
+	y := mat.NewVecDense(4, []float64{1.0, 0.0, 0.0, 0.0})
 
-	times := []float64{}
-	positions := []float64{}
-	velocities := []float64{}
+	times := mat.NewVecDense(Nsteps, nil)
+	history := mat.NewDense(Nsteps, 4, nil)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < Nsteps; i++ {
 		y = rk4(t, y, dt)
 		t += dt
 
-		times = append(times, t)
-		positions = append(positions, y.AtVec(0))
-		velocities = append(velocities, y.AtVec(1))
+		times.SetVec(i, t)
+		history.SetRow(i, y.RawVector().Data)
 	}
 
 	csvFilename := "simulation_results.csv"
-	err := exportDataToCSV(csvFilename, times, positions, velocities)
+	err = exportDataToCSV(csvFilename, times, history)
 	if err != nil {
 		fmt.Println("Error exporting data:", err)
 		return
 	}
 
 	plotFilename := "simulation_plot.png" // Name for the position plot
-	err = plotData(plotFilename, times, positions, velocities)
+	err = plotData(plotFilename, times, history)
 	if err != nil {
 		fmt.Println("Error plotting data:", err)
 		return
