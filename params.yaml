@@ -1,6 +1,12 @@
+# system parameters
 kA: 1
 kB: 1
 I1: 1
 I2: 1
 lamA: 0.1
 lamB: 0.1
+# initial conditions
+th1: 0
+th2: 0
+th1dot: 0.0
+th2dot: 0.0

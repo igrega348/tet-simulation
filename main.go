@@ -20,7 +20,7 @@ var params map[string]float64
 
 // Driving to the system
 func theta0(t float64) (float64, float64) {
-	omega := 2.0 * math.Pi * 10.0
+	omega := 2.0 * math.Pi
 	return math.Sin(omega * t), omega * math.Cos(omega*t)
 }
 
@@ -76,8 +76,17 @@ func rk4(t float64, y *mat.VecDense, dt float64) *mat.VecDense {
 	return result
 }
 
+func explicitEuler(t float64, y *mat.VecDense, dt float64) *mat.VecDense {
+	fvec := f(t, y)
+	result := mat.NewVecDense(y.Len(), nil)
+	result.ScaleVec(dt, fvec)
+	result.AddVec(y, result)
+	return result
+}
+
 // Plot data
-func plotData(filename string, times *mat.VecDense, history *mat.Dense) error {
+func plotData(times *mat.VecDense, history *mat.Dense) error {
+	filename := "simulation_plot_1.png"
 	p := plot.New()
 
 	pts := make(plotter.XYs, times.Len())
@@ -146,10 +155,10 @@ func plotData(filename string, times *mat.VecDense, history *mat.Dense) error {
 	p2.X.Label.Text = "Time (s)"
 	p2.Y.Label.Text = "Position/velocity (units)"
 
-	if err := p2.Save(4*vg.Inch, 3*vg.Inch, "simulation_plot_velocity.png"); err != nil {
+	if err := p2.Save(4*vg.Inch, 3*vg.Inch, "simulation_plot_2.png"); err != nil {
 		return err
 	}
-	fmt.Println("Velocity plot saved to simulation_plot_velocity.png")
+	fmt.Println("Plot saved to simulation_plot_2.png")
 
 	return nil
 }
@@ -161,7 +170,7 @@ func assembleMatrices(params map[string]float64) (*mat.Dense, *mat.Dense) {
 	kB := params["kB"]
 	lamA := params["lamA"]
 	lamB := params["lamB"]
-	B := mat.NewDense(4, 4, []float64{0, 0, 1, 0, 0, 0, 0, 1, kA + kB, -kB, lamA + lamB, -lamB, -kB, kB, -lamB, lamB})
+	B := mat.NewDense(4, 4, []float64{0, 0, -1, 0, 0, 0, 0, -1, kA + kB, -kB, lamA + lamB, -lamB, -kB, kB, -lamB, lamB})
 	return A, B
 }
 
@@ -200,15 +209,20 @@ func main() {
 
 	t := 0.0
 	dt := 0.01
-	tmax := 1.0
+	tmax := 100.0
 	Nsteps := int(tmax / dt)
-	y := mat.NewVecDense(4, []float64{1.0, 0.0, 0.0, 0.0})
+	th1 := params["th1"]
+	th2 := params["th2"]
+	th1dot := params["th1dot"]
+	th2dot := params["th2dot"]
+	y := mat.NewVecDense(4, []float64{th1, th2, th1dot, th2dot})
 
 	times := mat.NewVecDense(Nsteps, nil)
 	history := mat.NewDense(Nsteps, 4, nil)
 
 	for i := 0; i < Nsteps; i++ {
 		y = rk4(t, y, dt)
+		// y = explicitEuler(t, y, dt)
 		t += dt
 
 		times.SetVec(i, t)
@@ -222,8 +236,7 @@ func main() {
 		return
 	}
 
-	plotFilename := "simulation_plot.png" // Name for the position plot
-	err = plotData(plotFilename, times, history)
+	err = plotData(times, history)
 	if err != nil {
 		fmt.Println("Error plotting data:", err)
 		return
