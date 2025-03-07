@@ -42,7 +42,7 @@ func exportDataToCSV(filename string, times *mat.VecDense, history *mat.Dense) e
 			return err
 		}
 	}
-	fmt.Printf("Simulation results written to %s\n", filename)
+	log.Warn().Msgf("Simulation results written to %s", filename)
 
 	return nil // Indicate success
 }

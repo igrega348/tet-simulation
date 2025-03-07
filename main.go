@@ -1,11 +1,15 @@
+// Author: Ivan Grega
+// License: MIT
 package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/urfave/cli/v2"
 	"gonum.org/v1/gonum/mat"
 )
 
@@ -16,8 +20,8 @@ var omega float64
 
 // Driving to the system
 func theta0(t float64) (float64, float64) {
-	// return math.Sin(omega * t), omega * math.Cos(omega*t)
-	return 0.0, 0.0
+	return math.Sin(omega * t), omega * math.Cos(omega*t)
+	// return 0.0, 0.0
 }
 
 // Function to calculate the derivative of the system (example)
@@ -103,25 +107,27 @@ func assembleMMatrix(params map[string]float64) *mat.Dense {
 
 func matPrint(X mat.Matrix) {
 	fa := mat.Formatted(X, mat.Prefix(""), mat.Excerpt(0))
-	fmt.Printf("%v\n", fa)
+	log.Info().Msgf("\n%v\n", fa)
 }
 
-func main() {
+func simulate(
+	params_file string,
+) {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	zerolog.SetGlobalLevel(zerolog.WarnLevel)
 
 	// import from file params.yaml
 	var err error
-	params, err = importParamsFromYAML("params.yaml")
+	params, err = importParamsFromYAML(params_file)
 	if err != nil {
 		fmt.Println("Error importing parameters:", err)
 		return
 	}
-	fmt.Println("Imported parameters:", params)
+	// fmt.Println("Imported parameters:", params)
+	log.Info().Msgf("Imported parameters: %v", params)
 	A, B := assembleMatrices(params)
-	fmt.Println("Matrix A:")
+	log.Info().Msg("Matrix A:")
 	matPrint(A)
-	fmt.Println("Matrix B:")
+	log.Info().Msg("Matrix B:")
 	matPrint(B)
 	Ainv = mat.NewDense(4, 4, nil)
 	err = Ainv.Inverse(A)
@@ -129,7 +135,7 @@ func main() {
 		fmt.Println("Error calculating inverse of A:", err)
 		return
 	}
-	fmt.Println("Inverse of A:")
+	log.Info().Msg("Inverse of A:")
 	matPrint(Ainv)
 	P = mat.NewDense(4, 4, nil)
 	P.Mul(Ainv, B)
@@ -143,26 +149,26 @@ func main() {
 	th2 := params["th2"]
 	th1dot := params["th1dot"]
 	th2dot := params["th2dot"]
-	// calculate initial conditions to match steady-state response
+	// // calculate initial conditions to match steady-state response
 	// K := assembleKMatrix(params)
 	// M := assembleMMatrix(params)
-	// calculate steady-state response
-	// thetass := mat.NewVecDense(2, nil)
+	// // calculate steady-state response
+	// theta_ss := mat.NewVecDense(2, nil)
 	// KM := mat.NewDense(2, 2, nil)
 	// KM.Scale(-omega*omega, M)
 	// KM.Add(KM, K)
 	// KM.Inverse(KM)
 	// fvec := mat.NewVecDense(2, nil)
 	// fvec.SetVec(0, 1.0)
-	// thetass.MulVec(KM, fvec)
-	// th1 = thetass.AtVec(0)
-	// th2 = thetass.AtVec(1)
+	// theta_ss.MulVec(KM, fvec)
+	// th1 = theta_ss.AtVec(0)
+	// th2 = theta_ss.AtVec(1)
 	// th1dot = 0.0
 	// th2dot = 0.0
-	// // rescale
-	// // th2 = th2 / th1
-	// // th1 = 1.0
-	// fmt.Println("Initial conditions:", th1, th2, th1dot, th2dot)
+	// rescale
+	// th2 = th2 / th1
+	// th1 = 1.0
+	log.Info().Msgf("Initial conditions: %.2g %.2f %.2g %.2g", th1, th2, th1dot, th2dot)
 	y := mat.NewVecDense(4, []float64{th1, th2, th1dot, th2dot})
 
 	times := mat.NewVecDense(Nsteps, nil)
@@ -180,13 +186,42 @@ func main() {
 	csvFilename := "simulation_results.csv"
 	err = exportDataToCSV(csvFilename, times, history)
 	if err != nil {
-		fmt.Println("Error exporting data:", err)
+		log.Error().Msgf("Error exporting data to CSV: %v", err)
 		return
 	}
 
 	err = plotData(times, history)
 	if err != nil {
-		fmt.Println("Error plotting data:", err)
+		log.Error().Msgf("Error plotting data: %v", err)
 		return
+	}
+}
+
+func main() {
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "v",
+				Usage: "Enable verbose logging",
+			},
+			&cli.StringFlag{
+				Name:  "params",
+				Usage: "Path to the parameters file",
+			},
+		},
+		Action: func(c *cli.Context) error {
+			log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+			if c.Bool("v") {
+				zerolog.SetGlobalLevel(zerolog.InfoLevel)
+				log.Info().Msg("Verbose logging enabled")
+			} else {
+				zerolog.SetGlobalLevel(zerolog.WarnLevel)
+			}
+			simulate(c.String("params"))
+			return nil
+		},
+	}
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal().Err(err)
 	}
 }

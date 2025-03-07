@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-
+	"github.com/rs/zerolog/log"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -48,9 +47,10 @@ func plotData(times *mat.VecDense, history *mat.Dense) error {
 		return err
 	}
 
-	fmt.Printf("Plot saved to %s\n", filename)
+	log.Info().Msgf("Plot saved to %s", filename)
 
 	// Plot Velocity vs. Time
+	filename = "simulation_plot_2.png"
 	p2 := plot.New()
 	pts2 := make(plotter.XYs, times.Len())
 	for i := 0; i < times.Len(); i++ {
@@ -81,10 +81,10 @@ func plotData(times *mat.VecDense, history *mat.Dense) error {
 	p2.X.Label.Text = "Time (s)"
 	p2.Y.Label.Text = "Position/velocity (units)"
 
-	if err := p2.Save(4*vg.Inch, 3*vg.Inch, "simulation_plot_2.png"); err != nil {
+	if err := p2.Save(4*vg.Inch, 3*vg.Inch, filename); err != nil {
 		return err
 	}
-	fmt.Println("Plot saved to simulation_plot_2.png")
+	log.Info().Msgf("Plot saved to %s", filename)
 
 	return nil
 }
