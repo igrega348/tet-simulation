@@ -2,26 +2,22 @@ package main
 
 import (
 	"fmt"
-	"math"
 	"os"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"gonum.org/v1/gonum/mat"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/plotutil"
-	"gonum.org/v1/plot/vg"
 )
 
 var Ainv *mat.Dense
 var P *mat.Dense
 var params map[string]float64
+var omega float64
 
 // Driving to the system
 func theta0(t float64) (float64, float64) {
-	omega := 2.0 * math.Pi
-	return math.Sin(omega * t), omega * math.Cos(omega*t)
+	// return math.Sin(omega * t), omega * math.Cos(omega*t)
+	return 0.0, 0.0
 }
 
 // Function to calculate the derivative of the system (example)
@@ -84,85 +80,6 @@ func explicitEuler(t float64, y *mat.VecDense, dt float64) *mat.VecDense {
 	return result
 }
 
-// Plot data
-func plotData(times *mat.VecDense, history *mat.Dense) error {
-	filename := "simulation_plot_1.png"
-	p := plot.New()
-
-	pts := make(plotter.XYs, times.Len())
-	for i := 0; i < times.Len(); i++ {
-		pts[i].X = times.AtVec(i)
-		pts[i].Y = history.At(i, 0) // 1st dof
-	}
-	line1, err := plotter.NewLine(pts)
-	if err != nil {
-		return err
-	}
-	line1.LineStyle.Color = plotutil.Color(0)
-	p.Add(line1)
-	p.Legend.Add("Position DOF 1", line1)
-
-	for i := 0; i < times.Len(); i++ {
-		pts[i].X = times.AtVec(i)
-		pts[i].Y = history.At(i, 2) // 3rd dof
-	}
-	line2, err := plotter.NewLine(pts)
-	if err != nil {
-		return err
-	}
-	line2.LineStyle.Color = plotutil.Color(1)
-	p.Add(line2)
-	p.Legend.Add("Velocity DOF 1", line2)
-
-	p.Title.Text = "Simulation Results"
-	p.X.Label.Text = "Time (s)"
-	p.Y.Label.Text = "Position/velocity (units)"
-
-	if err := p.Save(4*vg.Inch, 3*vg.Inch, filename); err != nil {
-		return err
-	}
-
-	fmt.Printf("Plot saved to %s\n", filename)
-
-	// Plot Velocity vs. Time
-	p2 := plot.New()
-	pts2 := make(plotter.XYs, times.Len())
-	for i := 0; i < times.Len(); i++ {
-		pts2[i].X = times.AtVec(i)
-		pts2[i].Y = history.At(i, 1) // 2nd dof
-	}
-	line3, err := plotter.NewLine(pts2)
-	if err != nil {
-		return err
-	}
-	line3.LineStyle.Color = plotutil.Color(2)
-	p2.Add(line3)
-	p2.Legend.Add("Position DOF 2", line3)
-
-	for i := 0; i < times.Len(); i++ {
-		pts2[i].X = times.AtVec(i)
-		pts2[i].Y = history.At(i, 3) // 4th dof
-	}
-	line4, err := plotter.NewLine(pts2)
-	if err != nil {
-		return err
-	}
-	line4.LineStyle.Color = plotutil.Color(3)
-	p2.Add(line4)
-	p2.Legend.Add("Velocity DOF 2", line4)
-
-	p2.Title.Text = "Simulation Results"
-	p2.X.Label.Text = "Time (s)"
-	p2.Y.Label.Text = "Position/velocity (units)"
-
-	if err := p2.Save(4*vg.Inch, 3*vg.Inch, "simulation_plot_2.png"); err != nil {
-		return err
-	}
-	fmt.Println("Plot saved to simulation_plot_2.png")
-
-	return nil
-}
-
 func assembleMatrices(params map[string]float64) (*mat.Dense, *mat.Dense) {
 	// Assemble the matrices A and b
 	A := mat.NewDense(4, 4, []float64{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, params["I1"], 0, 0, 0, 0, params["I2"]})
@@ -172,6 +89,16 @@ func assembleMatrices(params map[string]float64) (*mat.Dense, *mat.Dense) {
 	lamB := params["lamB"]
 	B := mat.NewDense(4, 4, []float64{0, 0, -1, 0, 0, 0, 0, -1, kA + kB, -kB, lamA + lamB, -lamB, -kB, kB, -lamB, lamB})
 	return A, B
+}
+
+func assembleKMatrix(params map[string]float64) *mat.Dense {
+	K := mat.NewDense(2, 2, []float64{params["kA"] + params["kB"], -params["kB"], -params["kB"], params["kB"]})
+	return K
+}
+
+func assembleMMatrix(params map[string]float64) *mat.Dense {
+	M := mat.NewDense(2, 2, []float64{params["I1"], 0, 0, params["I2"]})
+	return M
 }
 
 func matPrint(X mat.Matrix) {
@@ -206,15 +133,36 @@ func main() {
 	matPrint(Ainv)
 	P = mat.NewDense(4, 4, nil)
 	P.Mul(Ainv, B)
+	omega = params["omega"]
 
 	t := 0.0
 	dt := 0.01
-	tmax := 100.0
+	tmax := params["tmax"]
 	Nsteps := int(tmax / dt)
 	th1 := params["th1"]
 	th2 := params["th2"]
 	th1dot := params["th1dot"]
 	th2dot := params["th2dot"]
+	// calculate initial conditions to match steady-state response
+	// K := assembleKMatrix(params)
+	// M := assembleMMatrix(params)
+	// calculate steady-state response
+	// thetass := mat.NewVecDense(2, nil)
+	// KM := mat.NewDense(2, 2, nil)
+	// KM.Scale(-omega*omega, M)
+	// KM.Add(KM, K)
+	// KM.Inverse(KM)
+	// fvec := mat.NewVecDense(2, nil)
+	// fvec.SetVec(0, 1.0)
+	// thetass.MulVec(KM, fvec)
+	// th1 = thetass.AtVec(0)
+	// th2 = thetass.AtVec(1)
+	// th1dot = 0.0
+	// th2dot = 0.0
+	// // rescale
+	// // th2 = th2 / th1
+	// // th1 = 1.0
+	// fmt.Println("Initial conditions:", th1, th2, th1dot, th2dot)
 	y := mat.NewVecDense(4, []float64{th1, th2, th1dot, th2dot})
 
 	times := mat.NewVecDense(Nsteps, nil)
