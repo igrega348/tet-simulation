@@ -24,9 +24,8 @@ func theta0(t float64) (float64, float64) {
 	// return 0.0, 0.0
 }
 
-// Function to calculate the derivative of the system (example)
+// Function to calculate the derivative of the system
 func f(t float64, y *mat.VecDense) *mat.VecDense {
-	// Example: Simple harmonic oscillator
 	dydt := mat.NewVecDense(y.Len(), nil)
 	theta, thetadot := theta0(t)
 	fvec := mat.NewVecDense(4, nil)
@@ -40,7 +39,7 @@ func f(t float64, y *mat.VecDense) *mat.VecDense {
 	return dydt
 }
 
-// 4th order Runge-Kutta integration using gonum
+// 4th order Runge-Kutta integration
 func rk4(t float64, y *mat.VecDense, dt float64) *mat.VecDense {
 	k1 := f(t, y)
 
@@ -122,7 +121,6 @@ func simulate(
 		fmt.Println("Error importing parameters:", err)
 		return
 	}
-	// fmt.Println("Imported parameters:", params)
 	log.Info().Msgf("Imported parameters: %v", params)
 	A, B := assembleMatrices(params)
 	log.Info().Msg("Matrix A:")
