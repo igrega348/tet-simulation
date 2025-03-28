@@ -1,16 +1,16 @@
 # system parameters
-kA: 0.5
-kB: 2
-I1: 2
+kA: 1
+kB: 1
+I1: 1
 I2: 1
-lamA: 0.0
-lamB: 0.0
+lamA: 0.05
+lamB: 0.05
 # initial conditions
-th1: -0.99161367
-th2: 0.18276939
+th1: 0.0
+th2: 0.0
 th1dot: 0.0
 th2dot: 0.0
 # driving frequency
-omega: 0.00
+omega: 20.000
 # time
-tmax: 200.0
+tmax: 500.0
