@@ -10,7 +10,10 @@ k = 1;
 for i = 1:length(files)
     % Read CSV file
     filename = fullfile(files(i).folder, files(i).name);
-    data = readtable(filename, 'HeaderLines', 0, 'VariableNames', {'time', 'th1', 'th2', 'th1dot', 'th2dot'});
+    opts = detectImportOptions(filename);
+    opts.DataLines = [1 inf];
+    opts.VariableNames = {'time', 'th1', 'th2', 'th1dot', 'th2dot'};
+    data = readtable(filename, opts);
     
     % Extract omega from filename
     [~, name, ~] = fileparts(files(i).name);
