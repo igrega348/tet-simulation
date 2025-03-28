@@ -62,4 +62,5 @@ xlabel('\omega');
 ylabel('Amplitude');
 title('Frequency Response');
 legend('show');
-grid on; 
+grid on;
+set(gca, 'YScale', 'log'); 
