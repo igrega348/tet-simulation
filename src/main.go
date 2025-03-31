@@ -104,6 +104,51 @@ func assembleMMatrix(params map[string]float64) *mat.Dense {
 	return M
 }
 
+func DenseToSymDense(A *mat.Dense) *mat.SymDense {
+	// Convert a Dense matrix to a SymDense matrix
+	rows, cols := A.Dims()
+	if rows != cols {
+		log.Error().Msg("Matrix is not square")
+		return nil
+	}
+	symA := mat.NewSymDense(rows, nil)
+	for i := 0; i < rows; i++ {
+		for j := i; j < cols; j++ {
+			symA.SetSym(i, j, A.At(i, j))
+		}
+	}
+	return symA
+}
+
+func get_dt(params map[string]float64) float64 {
+	// calculate analytical estimates of natural frequencies
+	K := assembleKMatrix(params)
+	M := assembleMMatrix(params)
+	KM := mat.NewDense(2, 2, nil)
+	KM.Inverse(M)
+	KM.Mul(KM, K)
+	KMsym := DenseToSymDense(KM)
+	// calculate eigenvalues = omega^2
+	var eigen mat.EigenSym
+	eigen.Factorize(KMsym, false)
+	// calculate natural frequencies. f=omega_n/(2*pi)
+	omega_n := []float64{0, 0}
+	eigen.Values(omega_n)
+	// square root of eigenvalues
+	fmax := 0.0
+	for i := 0; i < 2; i++ {
+		omega_n[i] = math.Sqrt(math.Abs(omega_n[i]))
+		if omega_n[i] > fmax {
+			fmax = omega_n[i]
+		}
+	}
+	log.Info().Msgf("Natural frequencies omega_n: %v", omega_n)
+	// set dt to 1/10 of the period of the highest frequency or 1/10 of the period of driving
+	fmax = max(fmax, params["omega"]/(2.0*math.Pi))
+	dt := 1.0 / (10.0 * fmax)
+	return dt
+}
+
 func matPrint(X mat.Matrix) {
 	fa := mat.Formatted(X, mat.Prefix(""), mat.Excerpt(0))
 	log.Info().Msgf("\n%v\n", fa)
@@ -140,32 +185,14 @@ func simulate(
 	omega = params["omega"]
 
 	t := 0.0
-	dt := 0.01
+	dt := get_dt(params)
 	tmax := params["tmax"]
 	Nsteps := int(tmax / dt)
 	th1 := params["th1"]
 	th2 := params["th2"]
 	th1dot := params["th1dot"]
 	th2dot := params["th2dot"]
-	// // calculate initial conditions to match steady-state response
-	// K := assembleKMatrix(params)
-	// M := assembleMMatrix(params)
-	// // calculate steady-state response
-	// theta_ss := mat.NewVecDense(2, nil)
-	// KM := mat.NewDense(2, 2, nil)
-	// KM.Scale(-omega*omega, M)
-	// KM.Add(KM, K)
-	// KM.Inverse(KM)
-	// fvec := mat.NewVecDense(2, nil)
-	// fvec.SetVec(0, 1.0)
-	// theta_ss.MulVec(KM, fvec)
-	// th1 = theta_ss.AtVec(0)
-	// th2 = theta_ss.AtVec(1)
-	// th1dot = 0.0
-	// th2dot = 0.0
-	// rescale
-	// th2 = th2 / th1
-	// th1 = 1.0
+	log.Info().Msgf("Time step dt=%.2g", dt)
 	log.Info().Msgf("Initial conditions: %.2g %.2f %.2g %.2g", th1, th2, th1dot, th2dot)
 	y := mat.NewVecDense(4, []float64{th1, th2, th1dot, th2dot})
 
@@ -182,7 +209,8 @@ func simulate(
 	}
 
 	csvFilename := "simulation_results.csv"
-	err = exportDataToCSV(csvFilename, times, history)
+	varNames := []string{"theta1", "theta2", "theta1dot", "theta2dot"}
+	err = exportDataToCSV(csvFilename, times, history, varNames...)
 	if err != nil {
 		log.Error().Msgf("Error exporting data to CSV: %v", err)
 		return

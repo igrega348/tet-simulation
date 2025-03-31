@@ -12,7 +12,7 @@ import (
 )
 
 // Export data to CSV file
-func exportDataToCSV(filename string, times *mat.VecDense, history *mat.Dense) error {
+func exportDataToCSV(filename string, times *mat.VecDense, history *mat.Dense, variableNames ...string) error {
 	file, err := os.Create(filename)
 	if err != nil {
 		return err // Return the error instead of panicking
@@ -24,9 +24,14 @@ func exportDataToCSV(filename string, times *mat.VecDense, history *mat.Dense) e
 
 	rows, cols := history.Dims()
 
+	// Use provided variable names or default to y0, y1, ...
 	header := []string{"Time"}
-	for i := 0; i < cols; i++ {
-		header = append(header, fmt.Sprintf("y%d", i))
+	if len(variableNames) == cols {
+		header = append(header, variableNames...)
+	} else {
+		for i := 0; i < cols; i++ {
+			header = append(header, fmt.Sprintf("y%d", i))
+		}
 	}
 	if err := writer.Write(header); err != nil {
 		return err
