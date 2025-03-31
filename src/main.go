@@ -182,16 +182,16 @@ func simulate(
 	matPrint(Ainv)
 	P = mat.NewDense(4, 4, nil)
 	P.Mul(Ainv, B)
-	omega = params["omega"]
+	omega = float64(params["omega"])
 
 	t := 0.0
 	dt := get_dt(params)
-	tmax := params["tmax"]
+	tmax := float64(params["tmax"])
 	Nsteps := int(tmax / dt)
-	th1 := params["th1"]
-	th2 := params["th2"]
-	th1dot := params["th1dot"]
-	th2dot := params["th2dot"]
+	th1 := float64(params["th1"])
+	th2 := float64(params["th2"])
+	th1dot := float64(params["th1dot"])
+	th2dot := float64(params["th2dot"])
 	log.Info().Msgf("Time step dt=%.2g", dt)
 	log.Info().Msgf("Initial conditions: %.2g %.2f %.2g %.2g", th1, th2, th1dot, th2dot)
 	y := mat.NewVecDense(4, []float64{th1, th2, th1dot, th2dot})
